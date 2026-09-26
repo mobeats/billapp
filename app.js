@@ -68,3 +68,17 @@ $("previewButton").onclick=()=>preview();
 $("vat").onchange=calculate;
 $("year").textContent=new Date().getFullYear();
 reset(); render();
+
+const CUSTOMER_KEY="billapp-customers-v1";
+let customers=JSON.parse(localStorage.getItem(CUSTOMER_KEY)||"[]");
+function persistCustomers(){localStorage.setItem(CUSTOMER_KEY,JSON.stringify(customers))}
+function renderCustomers(){
+ const select=$("customerSelect");
+ select.innerHTML='<option value="">Kunde auswählen …</option>'+customers.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join("");
+ $("customerList").innerHTML=customers.length?customers.map(c=>'<div class="invoice-row"><div><strong>'+esc(c.name)+'</strong><br><span>'+esc(c.address||"Keine Adresse")+'</span></div><button class="button ghost small" onclick="deleteCustomer(\''+c.id+'\')">Löschen</button></div>').join(""):'<div class="empty">Noch keine Kunden gespeichert.</div>';
+}
+function saveCustomer(){const name=$("newCustomerName").value.trim();if(!name)return alert("Bitte einen Namen eingeben.");customers.unshift({id:crypto.randomUUID(),name,address:$("newCustomerAddress").value.trim()});persistCustomers();$("newCustomerName").value="";$("newCustomerAddress").value="";renderCustomers();}
+function deleteCustomer(id){if(confirm("Kunden wirklich löschen?")){customers=customers.filter(c=>c.id!==id);persistCustomers();renderCustomers()}}
+$("customerSelect").addEventListener("change",()=>{const c=customers.find(x=>x.id===$("customerSelect").value);if(c){$("customer").value=c.name;$("customerAddress").value=c.address||""}});
+$("saveCustomer").onclick=saveCustomer;
+renderCustomers();

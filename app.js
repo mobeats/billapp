@@ -1,84 +1,38 @@
-const KEY="billapp-invoices-v1";
-let invoices=JSON.parse(localStorage.getItem(KEY)||"[]");
-let editingId=null;
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+const SUPABASE_URL="https://tssrrtcqwpityeztyqjv.supabase.co";
+const SUPABASE_KEY="sb_publishable_S1qNIznst6t4Jcz4UpCMuA_PV0WsMDu";
+const supabase=createClient(SUPABASE_URL,SUPABASE_KEY);
+const KEY="billapp-invoices-v1", CUSTOMER_KEY="billapp-customers-v1";
+let invoices=[],customers=[],editingId=null,currentUser=null,authMode="login";
 const $=id=>document.getElementById(id);
 const euro=n=>new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"}).format(Number(n)||0);
 function iso(d=new Date()){return new Date(d).toISOString().slice(0,10)}
-function nextNumber(){return "RE-"+new Date().getFullYear()+"-"+String(invoices.length+1).padStart(4,"0")}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
-function addItem(data={}){
- const row=document.createElement("div"); row.className="item";
- row.innerHTML='<div class="field"><label>Beschreibung</label><input class="desc" value="'+esc(data.desc||"")+'" placeholder="z. B. Webdesign"></div>'+
- '<div class="field"><label>Menge</label><input class="qty" type="number" min="0" step=".01" value="'+(data.qty??1)+'"></div>'+
- '<div class="field"><label>Einzelpreis (€)</label><input class="price" type="number" min="0" step=".01" value="'+(data.price??0)+'"></div>'+
- '<div class="item-total">0,00 €</div><button type="button" class="icon-btn" aria-label="Position löschen">×</button>';
- row.querySelectorAll("input").forEach(i=>i.addEventListener("input",calculate));
- row.querySelector(".icon-btn").onclick=()=>{row.remove();calculate()};
- $("items").appendChild(row); calculate();
-}
-function calculate(){
- let net=0;
- document.querySelectorAll(".item").forEach(r=>{
-   const v=(+r.querySelector(".qty").value||0)*(+r.querySelector(".price").value||0);
-   net+=v; r.querySelector(".item-total").textContent=euro(v);
- });
- const vat=net*(+$("vat").value||0)/100;
- $("net").textContent=euro(net); $("vatAmount").textContent=euro(vat); $("gross").textContent=euro(net+vat);
- return {net,vat,gross:net+vat};
-}
-function collect(){
- const t=calculate();
- return {id:editingId||crypto.randomUUID(),number:$("number").value,date:$("date").value,dueDate:$("dueDate").value,
- seller:$("seller").value,sellerAddress:$("sellerAddress").value,customer:$("customer").value,customerAddress:$("customerAddress").value,
- notes:$("notes").value,vat:+$("vat").value,items:[...document.querySelectorAll(".item")].map(r=>({desc:r.querySelector(".desc").value,qty:+r.querySelector(".qty").value||0,price:+r.querySelector(".price").value||0})),...t};
-}
-function persist(){localStorage.setItem(KEY,JSON.stringify(invoices))}
-function save(e){
- e.preventDefault(); const inv=collect(); const idx=invoices.findIndex(x=>x.id===inv.id);
- if(idx>=0) invoices[idx]=inv; else invoices.unshift(inv);
- persist(); reset(); render(); $("invoices").scrollIntoView({behavior:"smooth"});
-}
-function reset(){
- editingId=null; $("formTitle").textContent="Neue Rechnung"; $("invoiceForm").reset();
- $("number").value=nextNumber(); $("date").value=iso(); $("dueDate").value=iso(Date.now()+14*864e5);
- $("items").innerHTML=""; addItem();
-}
-function load(id){
- const x=invoices.find(i=>i.id===id); if(!x)return; editingId=x.id; $("formTitle").textContent="Rechnung bearbeiten";
- ["number","date","dueDate","seller","sellerAddress","customer","customerAddress","notes","vat"].forEach(k=>$(k).value=x[k]??"");
- $("items").innerHTML=""; x.items.forEach(addItem); $("invoice").scrollIntoView({behavior:"smooth"}); calculate();
-}
-function removeInvoice(id){
- if(confirm("Rechnung wirklich löschen?")){invoices=invoices.filter(x=>x.id!==id);persist();render()}
-}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+function nextNumber(){const y=new Date().getFullYear(), nums=invoices.map(x=>String(x.number||"").match(new RegExp("^RE-"+y+"-(\\d+)$"))).filter(Boolean).map(m=>+m[1]);return "RE-"+y+"-"+String((Math.max(0,...nums)+1)).padStart(4,"0")}
+function addItem(data={}){const row=document.createElement("div");row.className="item";row.innerHTML='<div class="field"><label>Beschreibung</label><input class="desc" value="'+esc(data.desc||data.description||"")+'" placeholder="z. B. Webdesign"></div><div class="field"><label>Menge</label><input class="qty" type="number" min="0" step=".01" value="'+(data.qty??data.quantity??1)+'"></div><div class="field"><label>Einzelpreis (€)</label><input class="price" type="number" min="0" step=".01" value="'+(data.price??data.unit_price??0)+'"></div><div class="item-total">0,00 €</div><button type="button" class="icon-btn" aria-label="Position löschen">×</button>';row.querySelectorAll("input").forEach(i=>i.addEventListener("input",calculate));row.querySelector(".icon-btn").onclick=()=>{row.remove();calculate()};$("items").appendChild(row);calculate()}
+function calculate(){let net=0;document.querySelectorAll(".item").forEach(r=>{const v=(+r.querySelector(".qty").value||0)*(+r.querySelector(".price").value||0);net+=v;r.querySelector(".item-total").textContent=euro(v)});const vat=net*(+$("vat").value||0)/100;$("net").textContent=euro(net);$("vatAmount").textContent=euro(vat);$("gross").textContent=euro(net+vat);return{net,vat,gross:net+vat}}
+function collect(){const t=calculate();return{id:editingId||crypto.randomUUID(),number:$("number").value,date:$("date").value,dueDate:$("dueDate").value,seller:$("seller").value,sellerAddress:$("sellerAddress").value,customer:$("customer").value,customerAddress:$("customerAddress").value,notes:$("notes").value,vat:+$("vat").value,items:[...document.querySelectorAll(".item")].map(r=>({desc:r.querySelector(".desc").value,qty:+r.querySelector(".qty").value||0,price:+r.querySelector(".price").value||0})),...t,status:"open"}}
+function reset(){editingId=null;$("formTitle").textContent="Neue Rechnung";$("invoiceForm").reset();$("number").value=nextNumber();$("date").value=iso();$("dueDate").value=iso(Date.now()+14*864e5);$("items").innerHTML="";addItem()}
+function load(id){const x=invoices.find(i=>i.id===id);if(!x)return;editingId=x.id;$("formTitle").textContent="Rechnung bearbeiten";["number","date","dueDate","seller","sellerAddress","customer","customerAddress","notes","vat"].forEach(k=>$(k).value=x[k]??"");$("customerSelect").value=x.customer_id||"";$("items").innerHTML="";(x.items||[]).forEach(addItem);$("invoice").scrollIntoView({behavior:"smooth"});calculate()}
+function render(){const total=invoices.reduce((a,x)=>a+(+x.gross||0),0),open=invoices.filter(x=>x.status!=="paid").reduce((a,x)=>a+(+x.gross||0),0);$("statInvoices").textContent=invoices.length;$("statRevenue").textContent=euro(total);$("statOpen").textContent=euro(open);const list=$("invoiceList");if(!invoices.length){list.innerHTML='<div class="empty">Noch keine Rechnungen gespeichert.</div>';return}list.innerHTML=invoices.map(x=>'<div class="invoice-row"><strong>'+esc(x.number)+'</strong><div><strong>'+esc(x.customer)+'</strong><br><span>'+new Date(x.date).toLocaleDateString("de-DE")+'</span></div><span>'+esc(x.seller)+'</span><span class="amount">'+euro(x.gross)+'</span><div><button class="button ghost small" onclick="load(\''+x.id+'\')">Bearbeiten</button><button class="button ghost small" onclick="preview(\''+x.id+'\')">PDF</button><button class="button ghost small" onclick="togglePaid(\''+x.id+'\')">'+(x.status==="paid"?"Offen":"Bezahlt")+'</button><button class="button ghost small" onclick="removeInvoice(\''+x.id+'\')">Löschen</button></div></div>').join("")}
+function renderCustomers(){$("customerSelect").innerHTML='<option value="">Kunde auswählen …</option>'+customers.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join("");$("customerList").innerHTML=customers.length?customers.map(c=>'<div class="invoice-row"><div><strong>'+esc(c.name)+'</strong><br><span>'+esc(c.address||"Keine Adresse")+'</span></div><button class="button ghost small" onclick="deleteCustomer(\''+c.id+'\')">Löschen</button></div>').join(""):'<div class="empty">Noch keine Kunden gespeichert.</div>'}
+async function loadCloud(){const [cs,is]=await Promise.all([supabase.from("customers").select("*").order("created_at",{ascending:false}),supabase.from("invoices").select("*,invoice_items(*)").order("date",{ascending:false})]);if(cs.error)throw cs.error;if(is.error)throw is.error;customers=cs.data||[];invoices=(is.data||[]).map(x=>({...x,dueDate:x.due_date,vat:+x.vat,vat_amount:+x.vat_amount,gross:+x.gross,net:+x.net,items:(x.invoice_items||[]).map(i=>({id:i.id,desc:i.description,qty:+i.quantity,price:+i.unit_price}))}));renderCustomers();render()}
+async function migrateLocal(){const lc=JSON.parse(localStorage.getItem(CUSTOMER_KEY)||"[]"),li=JSON.parse(localStorage.getItem(KEY)||"[]");if(!lc.length&&!li.length)return;const {data:existing}=await supabase.from("customers").select("id,name");const names=new Set((existing||[]).map(x=>x.name));const map=new Map();for(const c of lc){if(names.has(c.name)){const found=(existing||[]).find(x=>x.name===c.name);if(found)map.set(c.id,found.id);continue}const id=crypto.randomUUID();const {error}=await supabase.from("customers").insert({id,user_id:currentUser.id,name:c.name,address:c.address});if(!error)map.set(c.id,id)}for(const x of li){const customer_id=x.customer_id&&map.get(x.customer_id)||null;const {error}=await supabase.from("invoices").upsert({id:x.id,user_id:currentUser.id,number:x.number,date:x.date,due_date:x.dueDate,seller:x.seller,seller_address:x.sellerAddress,customer_id,customer:x.customer,customer_address:x.customerAddress,notes:x.notes,vat:x.vat,net:x.net,vat_amount:x.vat,gross:x.gross,status:x.status||"open"},{onConflict:"id"});if(error)console.warn("Migration invoice",error);else if(x.items?.length)await supabase.from("invoice_items").upsert(x.items.map(i=>({invoice_id:x.id,description:i.desc,quantity:i.qty,unit_price:i.price,line_net:(i.qty||0)*(i.price||0)})),{onConflict:"id"})}}
+async function save(e){e.preventDefault();try{const x=collect();const payload={id:x.id,user_id:currentUser.id,number:x.number,date:x.date,due_date:x.dueDate,seller:x.seller,seller_address:x.sellerAddress,customer_id:$("customerSelect").value||null,customer:x.customer,customer_address:x.customerAddress,notes:x.notes,vat:x.vat,net:x.net,vat_amount:x.vat,gross:x.gross,status:"open"};const {error}=await supabase.from("invoices").upsert(payload,{onConflict:"id"});if(error)throw error;await supabase.from("invoice_items").delete().eq("invoice_id",x.id);if(x.items.length){const {error:itemError}=await supabase.from("invoice_items").insert(x.items.map(i=>({invoice_id:x.id,description:i.desc,quantity:i.qty,unit_price:i.price,line_net:(i.qty||0)*(i.price||0)})));if(itemError)throw itemError}await loadCloud();reset();$("invoices").scrollIntoView({behavior:"smooth"})}catch(err){alert("Speichern fehlgeschlagen: "+err.message)}}
+async function saveCustomer(){const name=$("newCustomerName").value.trim();if(!name)return alert("Bitte einen Namen eingeben.");const {error}=await supabase.from("customers").insert({user_id:currentUser.id,name,address:$("newCustomerAddress").value.trim()});if(error)return alert(error.message);$("newCustomerName").value="";$("newCustomerAddress").value="";await loadCloud()}
+async function deleteCustomer(id){if(confirm("Kunden wirklich löschen?")){const {error}=await supabase.from("customers").delete().eq("id",id);if(error)alert(error.message);else await loadCloud()}}
+async function removeInvoice(id){if(confirm("Rechnung wirklich löschen?")){const {error}=await supabase.from("invoices").delete().eq("id",id);if(error)alert(error.message);else await loadCloud()}}
+async function togglePaid(id){const x=invoices.find(i=>i.id===id);if(!x)return;const {error}=await supabase.from("invoices").update({status:x.status==="paid"?"open":"paid"}).eq("id",id);if(error)alert(error.message);else await loadCloud()}
 function preview(id=null){if(id)load(id);setTimeout(()=>window.print(),80)}
-function render(){
- const total=invoices.reduce((a,x)=>a+(x.gross||0),0);
- $("statInvoices").textContent=invoices.length; $("statRevenue").textContent=euro(total); $("statOpen").textContent=euro(total);
- const list=$("invoiceList");
- if(!invoices.length){list.innerHTML='<div class="empty">Noch keine Rechnungen gespeichert. Erstelle oben deine erste Rechnung.</div>';return}
- list.innerHTML=invoices.map(x=>'<div class="invoice-row"><strong>'+esc(x.number)+'</strong><div><strong>'+esc(x.customer)+'</strong><br><span>'+new Date(x.date).toLocaleDateString("de-DE")+'</span></div><span>'+esc(x.seller)+'</span><span class="amount">'+euro(x.gross)+'</span><div><button class="button ghost small" onclick="load(\''+x.id+'\')">Bearbeiten</button><button class="button ghost small" onclick="preview(\''+x.id+'\')">PDF</button><button class="button ghost small" onclick="removeInvoice(\''+x.id+'\')">Löschen</button></div></div>').join("");
-}
-$("invoiceForm").addEventListener("submit",save);
-$("addItem").onclick=()=>addItem();
-$("resetButton").onclick=reset;
-$("startButton").onclick=()=>$("invoice").scrollIntoView({behavior:"smooth"});
-$("newInvoiceTop").onclick=()=>{reset();$("invoice").scrollIntoView({behavior:"smooth"})};
-$("previewButton").onclick=()=>preview();
-$("vat").onchange=calculate;
-$("year").textContent=new Date().getFullYear();
-reset(); render();
+window.load=load;window.preview=preview;window.removeInvoice=removeInvoice;window.deleteCustomer=deleteCustomer;window.togglePaid=togglePaid;
+$("invoiceForm").addEventListener("submit",save);$("addItem").onclick=()=>addItem();$("resetButton").onclick=reset;$("startButton").onclick=()=>$("invoice").scrollIntoView({behavior:"smooth"});$("newInvoiceTop").onclick=()=>{reset();$("invoice").scrollIntoView({behavior:"smooth"})};$("previewButton").onclick=()=>preview();$("vat").onchange=calculate;$("saveCustomer").onclick=saveCustomer;$("customerSelect").addEventListener("change",()=>{const c=customers.find(x=>x.id===$("customerSelect").value);if(c){$("customer").value=c.name;$("customerAddress").value=c.address||""}});$("year").textContent=new Date().getFullYear());
 
-const CUSTOMER_KEY="billapp-customers-v1";
-let customers=JSON.parse(localStorage.getItem(CUSTOMER_KEY)||"[]");
-function persistCustomers(){localStorage.setItem(CUSTOMER_KEY,JSON.stringify(customers))}
-function renderCustomers(){
- const select=$("customerSelect");
- select.innerHTML='<option value="">Kunde auswählen …</option>'+customers.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join("");
- $("customerList").innerHTML=customers.length?customers.map(c=>'<div class="invoice-row"><div><strong>'+esc(c.name)+'</strong><br><span>'+esc(c.address||"Keine Adresse")+'</span></div><button class="button ghost small" onclick="deleteCustomer(\''+c.id+'\')">Löschen</button></div>').join(""):'<div class="empty">Noch keine Kunden gespeichert.</div>';
-}
-function saveCustomer(){const name=$("newCustomerName").value.trim();if(!name)return alert("Bitte einen Namen eingeben.");customers.unshift({id:crypto.randomUUID(),name,address:$("newCustomerAddress").value.trim()});persistCustomers();$("newCustomerName").value="";$("newCustomerAddress").value="";renderCustomers();}
-function deleteCustomer(id){if(confirm("Kunden wirklich löschen?")){customers=customers.filter(c=>c.id!==id);persistCustomers();renderCustomers()}}
-$("customerSelect").addEventListener("change",()=>{const c=customers.find(x=>x.id===$("customerSelect").value);if(c){$("customer").value=c.name;$("customerAddress").value=c.address||""}});
-$("saveCustomer").onclick=saveCustomer;
-renderCustomers();
+function showAuthMessage(msg,error=false){$("authMessage").textContent=msg;$("authMessage").style.color=error?"#b42318":""}
+$("authToggle").onclick=()=>{authMode=authMode==="login"?"signup":"login";$("authTitle").textContent=authMode==="login"?"Anmelden":"Registrieren";$("authSubmit").textContent=authMode==="login"?"Anmelden":"Konto erstellen";$("authToggle").textContent=authMode==="login"?"Noch kein Konto? Registrieren":"Schon ein Konto? Anmelden";$("authPassword").autocomplete=authMode==="login"?"current-password":"new-password";showAuthMessage("")};
+$("authForm").addEventListener("submit",async e=>{e.preventDefault();showAuthMessage("Bitte warten …");const email=$("authEmail").value.trim(),password=$("authPassword").value;const result=authMode==="login"?await supabase.auth.signInWithPassword({email,password}):await supabase.auth.signUp({email,password,options:{emailRedirectTo:window.location.origin}});if(result.error)return showAuthMessage(result.error.message,true);if(authMode==="signup"&&!result.data.session){showAuthMessage("Registrierung erfolgreich. Bitte bestätige deine E-Mail-Adresse.")}else showAuthMessage("")});
+$("logoutButton").onclick=()=>supabase.auth.signOut();
+
+async function enterApp(user){currentUser=user;$("authPanel").hidden=true;$("appShell").hidden=false;try{await migrateLocal();await loadCloud();reset()}catch(err){alert("Cloud-Daten konnten nicht geladen werden: "+err.message)}}
+async function boot(){const {data}=await supabase.auth.getSession();if(data.session)await enterApp(data.session.user);supabase.auth.onAuthStateChange(async(_event,session)=>{if(session)await enterApp(session);else{currentUser=null;$("authPanel").hidden=false;$("appShell").hidden=true}})}
+boot();

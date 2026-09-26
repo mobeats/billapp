@@ -1,0 +1,1 @@
+{"name":"billapp","version":"1.0.0","private":true,"description":"Billapp.de – moderne Online-Rechnungen im Browser","scripts":{"test":"node --check app.js","start":"python3 -m http.server 8080"},"engines":{"node":">=18"}}
